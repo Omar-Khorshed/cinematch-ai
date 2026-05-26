@@ -1,0 +1,630 @@
+from google.colab import drive
+drive.mount('/content/drive')
+
+import pandas as pd
+
+movies = pd.read_csv(
+    '/content/drive/MyDrive/IR_Project/Data/tmdb_5000_movies.csv'
+)
+
+credits = pd.read_csv(
+    '/content/drive/MyDrive/IR_Project/Data/tmdb_5000_credits.csv'
+)
+
+movies = movies.merge(
+    credits,
+    left_on='id',
+    right_on='movie_id'
+)
+
+movies.head()
+
+movies.columns
+
+# التحقق إن id == movie_id
+
+print(
+    (movies['id'] == movies['movie_id']).all()
+)
+
+movies.sample(19)
+
+movies.drop(
+    columns=['movie_id'],
+    inplace=True
+)
+
+print(
+    (movies['title_x'] == movies['title_y']).all()
+)
+
+movies.drop(
+    columns=['title_y'],
+    inplace=True
+)
+
+movies.rename(
+    columns={
+        'title_x': 'title'
+    },
+    inplace=True
+)
+
+import ast
+
+def clean_crew(text):
+
+    names = []
+
+    try:
+
+        crew_list = ast.literal_eval(text)
+
+        for item in crew_list:
+
+            # خد الـ Director فقط
+            if item['job'] == 'Director':
+
+                names.append(
+                    item['name']
+                )
+
+    except:
+        pass
+
+    return " ".join(names)
+
+movies['director'] = movies[
+    'crew'
+].apply(clean_crew)
+
+movies[['crew', 'director']].head()
+
+import ast
+
+def clean_languages(text):
+
+    names = []
+
+    try:
+
+        lang_list = ast.literal_eval(text)
+
+        for item in lang_list:
+
+            names.append(
+                item['name']
+            )
+
+    except:
+        pass
+
+    return " ".join(names)
+
+movies['spoken_languages_clean'] = movies[
+    'spoken_languages'
+].apply(clean_languages)
+
+movies[[
+    'spoken_languages',
+    'spoken_languages_clean'
+]].head()
+
+import ast
+
+def clean_genres(text):
+
+    names = []
+
+    try:
+
+        genres_list = ast.literal_eval(text)
+
+        for item in genres_list:
+
+            names.append(
+                item['name']
+            )
+
+    except:
+        pass
+
+    return " ".join(names)
+
+movies['genres_clean'] = movies[
+    'genres'
+].apply(clean_genres)
+
+movies[[
+    'genres',
+    'genres_clean'
+]].head()
+
+movies
+
+import ast
+
+def clean_cast(text):
+
+    names = []
+
+    try:
+
+        cast_list = ast.literal_eval(text)
+
+        # أول 5 ممثلين فقط
+        for item in cast_list[:5]:
+
+            names.append(
+                item['name']
+            )
+
+    except:
+        pass
+
+    return " ".join(names)
+
+movies['main_cast'] = movies[
+    'cast'
+].apply(clean_cast)
+
+movies[[
+    'cast',
+    'main_cast'
+]].head()
+
+movies
+
+import ast
+
+def clean_keywords(text):
+
+    names = []
+
+    try:
+
+        keywords_list = ast.literal_eval(text)
+
+        for item in keywords_list:
+
+            names.append(
+                item['name']
+            )
+
+    except:
+        pass
+
+    return " ".join(names)
+
+movies['keywords_clean'] = movies[
+    'keywords'
+].apply(clean_keywords)
+
+movies[[
+
+    'keywords',
+    'keywords_clean'
+]].head()
+
+
+
+movies['tags'] = (
+    movies['title'].fillna('') + ' ' +
+    movies['overview'].fillna('') + ' ' +
+    movies['genres_clean'].fillna('') + ' ' +
+    movies['keywords_clean'].fillna('') + ' ' +
+    movies['main_cast'].fillna('') + ' ' +
+    movies['director'].fillna('') + ' ' +
+    movies['spoken_languages_clean'].fillna('')
+)
+
+movies['tags']
+
+import re
+import nltk
+
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+
+nltk.download('stopwords')
+nltk.download('wordnet')
+
+stop_words = set(
+    stopwords.words('english')
+)
+
+lemmatizer = WordNetLemmatizer()
+
+def preprocess(text):
+
+    text = str(text).lower()
+
+    # remove special chars
+    text = re.sub(
+        r'[^a-zA-Z0-9 ]',
+        ' ',
+        text
+    )
+
+    # tokenize
+    words = text.split()
+
+    # remove stopwords
+    words = [
+        w for w in words
+        if w not in stop_words
+    ]
+
+    # lemmatization
+    words = [
+        lemmatizer.lemmatize(w)
+        for w in words
+    ]
+
+    return " ".join(words)
+
+def preprocess_title(text):
+
+    text = str(text).lower()
+
+    # remove special chars only
+    text = re.sub(
+        r'[^a-zA-Z0-9 ]',
+        ' ',
+        text
+    )
+
+    return text
+
+movies['clean_title'] = movies[
+    'title'
+].apply(preprocess_title)
+
+movies['clean_overview'] = movies[
+    'overview'
+].apply(preprocess)
+
+movies[[
+    'title',
+    'clean_title',
+    'overview',
+    'clean_overview'
+]].head()
+
+movies.columns
+
+movies = movies[[
+    'id',
+    'title',
+    'overview',
+    'genres_clean',
+    'keywords_clean',
+    'main_cast',
+    'director',
+    'spoken_languages_clean',
+    'popularity',
+    'vote_average',
+    'clean_title',
+    'clean_overview'
+]]
+
+movies.head()
+
+movies.duplicated().sum()
+
+movies.isnull().sum()
+
+movies['overview'] = movies[
+    'overview'
+].fillna('')
+
+from collections import defaultdict
+
+inverted_index = {
+    'title': defaultdict(list),
+    'overview': defaultdict(list)
+}
+
+for idx, row in movies.iterrows():
+
+    tokens = row['clean_title'].split()
+
+    for token in tokens:
+
+        inverted_index['title'][token].append(idx)
+
+for idx, row in movies.iterrows():
+
+    tokens = row['clean_overview'].split()
+
+    for token in tokens:
+
+        inverted_index['overview'][token].append(idx)
+
+inverted_index['title']['avatar']
+
+inverted_index['overview']['space'][:10]
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+movies['clean_cast'] = movies[
+    'main_cast'
+].apply(preprocess_title)
+
+movies['clean_director'] = movies[
+    'director'
+].apply(preprocess_title)
+
+title_vectorizer = TfidfVectorizer(
+    ngram_range=(1,2)
+)
+
+title_matrix = title_vectorizer.fit_transform(
+    movies['clean_title']
+)
+
+overview_vectorizer = TfidfVectorizer(
+    max_features=5000,
+    ngram_range=(1,2)
+)
+
+overview_matrix = overview_vectorizer.fit_transform(
+    movies['clean_overview']
+)
+
+cast_vectorizer = TfidfVectorizer(
+    ngram_range=(1,2)
+)
+
+cast_matrix = cast_vectorizer.fit_transform(
+    movies['clean_cast']
+)
+
+director_vectorizer = TfidfVectorizer(
+    ngram_range=(1,2)
+)
+
+director_matrix = director_vectorizer.fit_transform(
+    movies['clean_director']
+)
+
+from sklearn.metrics.pairwise import cosine_similarity
+
+def search_movies(
+    query,
+    title_weight=2.0,
+    overview_weight=1.0,
+    cast_weight=1.5,
+    director_weight=1.5,
+    top_k=10
+):
+
+    # =========================
+    # preprocess query
+    # =========================
+
+    clean_query_title = preprocess_title(query)
+
+    clean_query_overview = preprocess(query)
+
+    # =========================
+    # title similarity
+    # =========================
+
+    title_query_vector = title_vectorizer.transform(
+        [clean_query_title]
+    )
+
+    title_scores = cosine_similarity(
+        title_query_vector,
+        title_matrix
+    ).flatten()
+
+    # =========================
+    # overview similarity
+    # =========================
+
+    overview_query_vector = overview_vectorizer.transform(
+        [clean_query_overview]
+    )
+
+    overview_scores = cosine_similarity(
+        overview_query_vector,
+        overview_matrix
+    ).flatten()
+
+    # =========================
+    # cast similarity
+    # =========================
+
+    cast_query_vector = cast_vectorizer.transform(
+        [clean_query_title]
+    )
+
+    cast_scores = cosine_similarity(
+        cast_query_vector,
+        cast_matrix
+    ).flatten()
+
+    # =========================
+    # director similarity
+    # =========================
+
+    director_query_vector = director_vectorizer.transform(
+        [clean_query_title]
+    )
+
+    director_scores = cosine_similarity(
+        director_query_vector,
+        director_matrix
+    ).flatten()
+
+    # =========================
+    # final weighted score
+    # =========================
+
+    final_scores = (
+        title_weight * title_scores
+        +
+        overview_weight * overview_scores
+        +
+        cast_weight * cast_scores
+        +
+        director_weight * director_scores
+    )
+
+    # =========================
+    # top results
+    # =========================
+
+    top_indices = final_scores.argsort()[-top_k:][::-1]
+
+    results = movies.iloc[top_indices][[
+        'title',
+        'genres_clean',
+        'main_cast',
+        'director',
+        'vote_average',
+        'popularity'
+    ]]
+
+    results['score'] = final_scores[top_indices]
+
+    return results
+
+search_movies(
+    "spider",
+    cast_weight=5.0
+)
+
+search_movies(
+    "spider"
+
+)
+
+movies
+
+movies.columns
+
+
+!pip install rank-bm25
+
+from rank_bm25 import BM25Okapi
+
+movies['bm25_text'] = (
+    movies['clean_title'] + ' ' +
+    movies['clean_overview'] + ' ' +
+    movies['clean_cast'] + ' ' +
+    movies['clean_director']
+)
+
+tokenized_corpus = [
+    doc.split()
+    for doc in movies['bm25_text']
+]
+
+bm25 = BM25Okapi(
+    tokenized_corpus
+)
+
+def bm25_search(
+    query,
+    top_k=10
+):
+
+    # preprocess query
+    clean_query = preprocess(query)
+
+    # tokenize query
+    tokenized_query = clean_query.split()
+
+    # BM25 scores
+    scores = bm25.get_scores(
+        tokenized_query
+    )
+
+    # top results
+    top_indices = scores.argsort()[-top_k:][::-1]
+
+    results = movies.iloc[top_indices][[
+        'title',
+        'genres_clean',
+        'main_cast',
+        'director',
+        'vote_average',
+        'popularity'
+    ]]
+
+    results['score'] = scores[top_indices]
+    results = results.sort_values(
+    by=['score', 'popularity'],
+    ascending=False
+)
+
+    return results
+
+bm25_search(
+    "dwayne johnson"
+)
+
+
+
+test_queries = {
+    "brad pitt": [
+        "Fight Club",
+        "Se7en",
+        "World War Z"
+    ],
+
+    "batman": [
+        "Batman Begins",
+        "The Dark Knight",
+        "The Dark Knight Rises"
+    ],
+
+    "spider man": [
+        "Spider-Man",
+        "Spider-Man 2",
+        "Spider-Man 3"
+    ]
+}
+
+def precision_at_k(
+    retrieved_titles,
+    relevant_titles,
+    k=10
+):
+
+    retrieved_k = retrieved_titles[:k]
+
+    relevant_found = 0
+
+    for movie in retrieved_k:
+
+        if movie in relevant_titles:
+
+            relevant_found += 1
+
+    return relevant_found / k
+
+for query, relevant_movies in test_queries.items():
+
+    results = bm25_search(query)
+
+    retrieved_titles = results[
+        'title'
+    ].tolist()
+
+    precision = precision_at_k(
+        retrieved_titles,
+        relevant_movies,
+        k=10
+    )
+
+    print(f"Query: {query}")
+
+    print(f"Precision@10: {precision}")
+
+    print("-" * 40)
+
+
