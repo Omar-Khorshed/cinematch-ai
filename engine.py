@@ -79,39 +79,19 @@ def preprocess_title(text):
     text = re.sub(r'[^a-zA-Z0-9 ]', ' ', text)
     return text
 
-@st.cache_resource(show_spinner="Loading models and processing data...")
+@st.cache_resource(show_spinner="Loading models and data...")
 def load_and_prepare_data():
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    movies_path = os.path.join(base_dir, 'tmdb_5000_movies.csv')
-    credits_path = os.path.join(base_dir, 'tmdb_5000_credits.csv')
+    movies_path = os.path.join(base_dir, 'cleaned_movies.csv')
     
-    try:
-        movies = pd.read_csv(movies_path)
-    except UnicodeDecodeError:
-        movies = pd.read_csv(movies_path, encoding='latin-1')
-        
-    try:
-        credits = pd.read_csv(credits_path)
-    except UnicodeDecodeError:
-        credits = pd.read_csv(credits_path, encoding='latin-1')
-    
-    movies = movies.merge(credits, left_on='id', right_on='movie_id')
-    movies.drop(columns=['movie_id'], inplace=True)
-    movies.drop(columns=['title_y'], inplace=True)
-    movies.rename(columns={'title_x': 'title'}, inplace=True)
-    
-    movies['director'] = movies['crew'].apply(clean_crew)
-    movies['spoken_languages_clean'] = movies['spoken_languages'].apply(clean_languages)
-    movies['genres_clean'] = movies['genres'].apply(clean_genres)
-    movies['main_cast'] = movies['cast'].apply(clean_cast)
-    movies['keywords_clean'] = movies['keywords'].apply(clean_keywords)
-    
-    movies['clean_title'] = movies['title'].apply(preprocess_title)
-    movies['clean_overview'] = movies['overview'].apply(preprocess)
-    movies['clean_cast'] = movies['main_cast'].apply(preprocess_title)
-    movies['clean_director'] = movies['director'].apply(preprocess_title)
+    movies = pd.read_csv(movies_path)
     
     # Fill NA values
+    movies['clean_title'] = movies['clean_title'].fillna('')
+    movies['clean_overview'] = movies['clean_overview'].fillna('')
+    movies['clean_cast'] = movies['clean_cast'].fillna('')
+    movies['clean_director'] = movies['clean_director'].fillna('')
+    
     movies['overview'] = movies['overview'].fillna('')
     movies['genres_clean'] = movies['genres_clean'].fillna('Unknown')
     movies['director'] = movies['director'].fillna('Unknown')
@@ -120,10 +100,10 @@ def load_and_prepare_data():
     movies['popularity'] = movies['popularity'].fillna(0.0)
     
     # Independent BM25 Setup for Weights Support
-    tokenized_title = [doc.split() for doc in movies['clean_title']]
-    tokenized_overview = [doc.split() for doc in movies['clean_overview']]
-    tokenized_cast = [doc.split() for doc in movies['clean_cast']]
-    tokenized_director = [doc.split() for doc in movies['clean_director']]
+    tokenized_title = [str(doc).split() for doc in movies['clean_title']]
+    tokenized_overview = [str(doc).split() for doc in movies['clean_overview']]
+    tokenized_cast = [str(doc).split() for doc in movies['clean_cast']]
+    tokenized_director = [str(doc).split() for doc in movies['clean_director']]
     
     bm25_title = BM25Okapi(tokenized_title)
     bm25_overview = BM25Okapi(tokenized_overview)
@@ -138,6 +118,7 @@ def load_and_prepare_data():
     }
     
     return movies, models
+
 
 def bm25_search_func(query, movies, models, title_w=2.0, overview_w=1.0, cast_w=1.5, director_w=1.5, top_k=20):
     clean_query_title = preprocess_title(query)
